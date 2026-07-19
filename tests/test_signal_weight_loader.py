@@ -71,3 +71,36 @@ class TestEnrichWithSnapshots:
         result = await enrich_with_snapshots(trade_dicts, db=object())
         assert result == trade_dicts
         assert result[0]["entry_iv_rank"] is None
+
+    @pytest.mark.asyncio
+    async def test_explicit_analysis_history_model_is_used_when_provided(self):
+        """Consuming apps that already have their own analysis-history model
+        (e.g. chanakya's options_advisor.storage.models.AnalysisHistory) can
+        pass it explicitly instead of relying on the trading_common-default
+        import path — this is what makes the function usable outside
+        DayTrader at all."""
+        from sqlalchemy import Column, String
+        from sqlalchemy.orm import DeclarativeBase
+
+        class _Base(DeclarativeBase):
+            pass
+
+        class _FakeAnalysisHistory(_Base):
+            __tablename__ = "_fake_analysis_history_test_only"
+            analysis_id = Column(String, primary_key=True)
+            signal_snapshot_json = Column(String)
+
+        class _FakeResult:
+            def __iter__(self):
+                return iter([("some-id", '{"volatility": {"iv_rank_52wk": 42.0}}')])
+
+        class _FakeDb:
+            async def execute(self, stmt):
+                return _FakeResult()
+
+        trade = SimpleNamespace(pnl_dollar=1.0, analysis_id="some-id")
+        trade_dicts = build_trade_dicts_for_weighting([trade])
+        result = await enrich_with_snapshots(
+            trade_dicts, db=_FakeDb(), analysis_history_model=_FakeAnalysisHistory
+        )
+        assert result[0]["entry_iv_rank"] == 42.0

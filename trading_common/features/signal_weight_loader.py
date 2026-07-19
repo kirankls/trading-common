@@ -107,6 +107,7 @@ def build_trade_dicts_for_weighting(trades: list[Any]) -> list[dict]:
 async def enrich_with_snapshots(
     trade_dicts: list[dict],
     db: AsyncSession,
+    analysis_history_model: Any = None,
 ) -> list[dict]:
     """
     Back-fill signal-context fields from analysis_history.signal_snapshot_json.
@@ -128,6 +129,14 @@ async def enrich_with_snapshots(
         Output of build_trade_dicts_for_weighting().
     db:
         An open AsyncSession.  The caller owns the session lifetime.
+    analysis_history_model:
+        Optional SQLAlchemy model exposing ``analysis_id`` and
+        ``signal_snapshot_json`` columns. Pass this explicitly when your own
+        app already has an analysis-history model (e.g. chanakya's
+        ``options_advisor.storage.models.AnalysisHistory``) so this function
+        doesn't have to guess an import path. When omitted, falls back to
+        attempting ``trading_common.storage.repositories.AnalysisHistory``
+        (daytrader's own future model, not yet ported as of this writing).
 
     Returns
     -------
@@ -146,15 +155,20 @@ async def enrich_with_snapshots(
     # Batch-fetch signal_snapshot_json for all relevant analysis rows
     snapshot_map: dict[str, dict] = {}
     # AnalysisHistory is options-advisor-specific and intentionally not ported
-    # (see module docstring) — this import is expected to fail at runtime
-    # until/unless a later milestone adds an equivalent model; the except
-    # branch below handles that as a non-fatal fallback.
+    # (see module docstring) — callers that already have their own model
+    # (chanakya) should pass it via analysis_history_model. The default
+    # import path below is daytrader's own future model and is expected to
+    # fail at runtime until/unless a later milestone adds it; the except
+    # branch handles that as a non-fatal fallback either way.
     try:
         from sqlalchemy import select
 
-        from trading_common.storage.repositories import (  # type: ignore[attr-defined]
-            AnalysisHistory,
-        )
+        if analysis_history_model is not None:
+            AnalysisHistory = analysis_history_model
+        else:
+            from trading_common.storage.repositories import (  # type: ignore[attr-defined]
+                AnalysisHistory,
+            )
 
         stmt = (
             select(AnalysisHistory.analysis_id, AnalysisHistory.signal_snapshot_json)
