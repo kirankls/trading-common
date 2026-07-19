@@ -1,0 +1,98 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "trading-common"
+version = "1.0.0"
+description = "Shared trading data-client/services library extracted from daytrader's trading_common/ (D2) -- consumed by daytrader and, in a separate migration, chanakya."
+requires-python = ">=3.12"
+dependencies = [
+    "structlog>=24.4",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "python-dotenv>=1.0",
+
+    # Database (storage/db.py, storage/repositories/base.py)
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "aiosqlite>=0.20",
+
+    # Data clients
+    "httpx>=0.27",
+    "requests>=2.32",
+    "yfinance>=0.2.40",
+    "fredapi>=0.5.2",
+
+    # Options pricing/chain (pricing/bs.py, data_clients/options_chain.py)
+    "py_vollib==1.0.12",
+    "py_vollib_vectorized==0.1.1",
+    "scipy>=1.11",
+
+    # Feature engineering (features/technical.py, features/volatility.py)
+    "pandas>=2.2",
+    "numpy>=2.0",
+    "pandas-ta>=0.3.14b0",
+
+    # Schwab (services/schwab_token.py -- token encryption/refresh;
+    # data_clients/options_chain.py's self-authenticating fetch)
+    "schwab-py>=1.5",
+    "pynacl>=1.5",
+
+    # Auth (auth.py -- password hashing + JWT)
+    "python-jose[cryptography]>=3.3",
+    "argon2-cffi>=23.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "respx>=0.21",
+    "ruff>=0.7",
+    "mypy>=1.13",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["trading_common"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+# E501: line length (ported files keep source line lengths).
+# UP042: str+Enum inheritance is intentional (JSON serialization relies on
+#   plain str values); enum.StrEnum reprs differently.
+# UP046: Generic[T] subclassing kept as-is in ported dataclasses (Result,
+#   BaseRepository) rather than migrating to PEP 695 type-parameter syntax.
+ignore = ["E501", "UP042", "UP046"]
+
+[tool.ruff.lint.per-file-ignores]
+# N803/N806: pricing/bs.py's S/K/T/r/sigma/q argument and Sa/Ka/Ta/.../Pa
+# local-variable names are the standard Black-Scholes notation (and the
+# exact contract signature `price(S, K, T, r, sigma, option_type, q=0.0)`
+# other modules import by name) -- ported verbatim from the chanakya
+# original, not renamed to satisfy a lowercase-only style.
+"trading_common/pricing/bs.py" = ["N803", "N806"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_unused_configs = true
+warn_return_any = false
+ignore_missing_imports = true
+disallow_any_generics = false
+disallow_untyped_defs = false
+# Ported files keep the source's looser, pre-strict typing style --
+# "extract, don't rewrite" -- rather than retrofitting full generic-parameter
+# strictness across ~2800 ported lines.
+disable_error_code = ["type-arg", "no-untyped-def", "var-annotated", "no-any-return", "arg-type"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["trading_common"]
