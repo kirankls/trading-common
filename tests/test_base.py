@@ -12,6 +12,7 @@ from trading_common.data_clients.base import (
     FetchErrorType,
     Result,
     map_price_ticker,
+    map_schwab_ticker,
 )
 
 
@@ -73,3 +74,23 @@ def test_fetch_error_is_exception():
 )
 def test_map_price_ticker(ticker, expected):
     assert map_price_ticker(ticker) == expected
+
+
+@pytest.mark.parametrize(
+    "ticker,expected",
+    [
+        ("BRKB", "BRK.B"),
+        ("BRK-B", "BRK.B"),
+        ("brkb", "BRK.B"),  # case-insensitive
+        ("BFA", "BF.A"),
+        ("BF-A", "BF.A"),
+        ("BFB", "BF.B"),
+        ("BF-B", "BF.B"),
+        ("AAPL", "AAPL"),  # unmapped ticker passes through unchanged
+    ],
+)
+def test_map_schwab_ticker(ticker, expected):
+    """Confirmed in production (chanakya): Schwab's pricehistory endpoint
+    returns HTTP 200 {"empty": true} for the bare/hyphen forms multi-share-
+    class tickers are stored in -- only the period-delimited form resolves."""
+    assert map_schwab_ticker(ticker) == expected

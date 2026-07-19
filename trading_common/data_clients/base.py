@@ -29,6 +29,29 @@ def map_price_ticker(ticker: str) -> str:
     """
     return _YAHOO_PRICE_TICKER.get(ticker.upper(), ticker)
 
+
+# Multi-share-class tickers where the scanner universe stores the bare/hyphen
+# form (yfinance convention, e.g. "BRK-B" or "BRKB") but Schwab's
+# /marketdata/v1/pricehistory endpoint only recognises the period-delimited
+# form. Confirmed in production (chanakya): Schwab returned HTTP 200
+# {"empty": true} for "BRKB" on every scan (schwab_ohlcv_ok stuck at 0 partly
+# because of this, though most tickers never need the Schwab fallback at all
+# since yfinance succeeds for them directly). Ported from chanakya's
+# data_clients/base.py -- this fix was missing from the initial extraction.
+_SCHWAB_SHARE_CLASS_TICKER: dict[str, str] = {
+    "BRKB": "BRK.B",
+    "BRK-B": "BRK.B",
+    "BFA": "BF.A",
+    "BF-A": "BF.A",
+    "BFB": "BF.B",
+    "BF-B": "BF.B",
+}
+
+
+def map_schwab_ticker(ticker: str) -> str:
+    """Return the Schwab-compatible ticker for price/OHLCV lookups."""
+    return _SCHWAB_SHARE_CLASS_TICKER.get(ticker.upper(), ticker)
+
 T = TypeVar("T")
 
 
