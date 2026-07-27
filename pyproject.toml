@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trading-common"
-version = "1.0.3"
+version = "1.0.4"
 description = "Shared trading data-client/services library extracted from daytrader's trading_common/ (D2) -- consumed by daytrader and, in a separate migration, chanakya."
 requires-python = ">=3.12"
 dependencies = [

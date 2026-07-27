@@ -23,7 +23,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-__all__ = ["OccSymbolParts", "format_occ_symbol", "parse_occ_symbol"]
+__all__ = [
+    "OccSymbolParts",
+    "format_occ_symbol",
+    "parse_occ_symbol",
+    "parse_polygon_option_ticker",
+]
 
 
 @dataclass(frozen=True)
@@ -60,6 +65,58 @@ def parse_occ_symbol(symbol: str) -> OccSymbolParts | None:
     date_part = symbol[6:12]
     contract_type = symbol[12]
     strike_part = symbol[13:21]
+
+    if not root:
+        return None
+    if contract_type not in ("C", "P"):
+        return None
+    if not (date_part.isdigit() and strike_part.isdigit()):
+        return None
+
+    try:
+        expiration = date(2000 + int(date_part[0:2]), int(date_part[2:4]), int(date_part[4:6]))
+    except ValueError:
+        return None
+
+    strike = int(strike_part) / 1000.0
+    option_type = "CALL" if contract_type == "C" else "PUT"
+    return OccSymbolParts(root=root, expiration=expiration, option_type=option_type, strike=strike)
+
+
+def parse_polygon_option_ticker(ticker: str) -> OccSymbolParts | None:
+    """Parse a Polygon/Massive-format option ticker (e.g.
+    ``"O:A260717C00120000"``) -- verified against a real options
+    day-aggregates flat file before writing this parser (docs/
+    DAYTRADER_BACKTEST_INTEGRATION_PROMPT.md Phase 3): the file's own
+    ``ticker`` column carries the full contract identity (no separate
+    underlying/expiry/strike/type columns), and Polygon's convention is
+    NOT the same shape ``parse_occ_symbol`` above handles -- there is no
+    fixed 6-char space-padded root; the root is variable-length with no
+    padding at all, immediately followed by the 6-digit date.
+
+    Format: ``"O:"`` prefix + variable-length root (no padding) + 6-digit
+    expiration (YYMMDD) + 1-char C/P + 8-digit strike (strike * 1000,
+    zero-padded). Parsed from the END of the string (strike is always the
+    last 8 characters, then C/P, then the 6-digit date, then whatever
+    remains is the root) -- the only reliable way to handle a
+    non-padded, variable-width root without a lookup table of valid
+    tickers.
+
+    Returns ``None`` (never raises) for anything that doesn't match --
+    Polygon's stock-aggregates files use the bare ticker with no prefix at
+    all, which is the normal, expected non-match case when this parser is
+    run against mixed input, not an error.
+    """
+    if not ticker.startswith("O:"):
+        return None
+    body = ticker[2:]
+    if len(body) < 16:  # 1+ char root + 6 date + 1 type + 8 strike, minimum
+        return None
+
+    strike_part = body[-8:]
+    contract_type = body[-9]
+    date_part = body[-15:-9]
+    root = body[:-15]
 
     if not root:
         return None
